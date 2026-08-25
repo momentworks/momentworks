@@ -1163,13 +1163,19 @@
       }
       if(!res.ok) throw new Error('구글 시트를 불러오지 못했습니다 (' + res.status + '). 시트가 "링크가 있는 모든 사용자 - 뷰어"로 공유되어 있는지 확인해주세요.');
       var text = await res.text();
+      text = text.replace(/^\uFEFF/, ''); // 구글 CSV 응답 맨 앞에 붙는 BOM(보이지 않는 문자) 제거
       var rows = availParseCSV(text);
       if(rows.length < 2) return [];
 
-      var header = rows[0].map(function(h){ return ('' + h).trim(); });
-      var dateIdx = header.indexOf(g.dateHeader);
-      var timeIdx = header.indexOf(g.timeHeader);
+      // 헤더 비교 시 BOM/공백/줄바꿈 등 보이지 않는 문자를 모두 제거해 정확히 매칭되도록 함
+      var normalize = function(s){
+        return ('' + s).replace(/\uFEFF/g, '').replace(/\s+/g, '').trim();
+      };
+      var header = rows[0].map(normalize);
+      var dateIdx = header.indexOf(normalize(g.dateHeader));
+      var timeIdx = header.indexOf(normalize(g.timeHeader));
       if(dateIdx === -1 || timeIdx === -1){
+        console.error('[모먼트웍스] 시트에서 읽은 헤더 목록:', rows[0]);
         throw new Error('시트에서 "' + g.dateHeader + '" 또는 "' + g.timeHeader + '" 컬럼을 찾지 못했습니다. GOOGLE_SHEET_CONFIG의 헤더명을 확인해주세요.');
       }
 
