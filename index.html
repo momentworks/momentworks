@@ -1067,8 +1067,10 @@
     var GOOGLE_SHEET_CONFIG = {
       sheetId: '1bSZC9CEqC25URN8bBbnF9qjsJubHx7em-3HqnhjDnGw',
       gid: '0',
-      dateHeader: '예식일자', // TODO: 시트의 실제 날짜 컬럼 헤더명과 다르면 수정
-      timeHeader: '예식시간'  // TODO: 시트의 실제 시간 컬럼 헤더명과 다르면 수정
+      dateHeader: '예식일자', // 헤더 텍스트 검색용 (컬럼 문자를 지정하면 사용되지 않음)
+      timeHeader: '예식시간',
+      dateColumnLetter: 'I', // 예식일자가 있는 열
+      timeColumnLetter: 'J'  // 예식시간이 있는 열
     };
 
     var AVAIL_CONFIG = {
@@ -1180,11 +1182,25 @@
       var url = 'https://docs.google.com/spreadsheets/d/' + g.sheetId
         + '/gviz/tq?tqx=out:csv&gid=' + g.gid;
 
+      // 파일을 더블클릭해서 file:// 로 열면 브라우저가 외부 요청 자체를 차단합니다.
+      if(location.protocol === 'file:'){
+        throw new Error(
+          '지금 이 페이지를 파일 탐색기에서 직접 더블클릭해서 열고 계신 것 같아요(주소창이 file:// 로 시작).\n' +
+          '이 방식은 브라우저 보안 정책상 외부 데이터를 아예 불러올 수 없습니다.\n' +
+          '실제 호스팅 주소(https://...)에 업로드한 뒤 그 주소로 접속해서 테스트해주세요.'
+        );
+      }
+
       var res;
       try {
         res = await fetch(url);
       } catch(networkErr){
-        throw new Error('구글 시트에 접속할 수 없습니다. 시트가 "링크가 있는 모든 사용자 - 뷰어"로 공유되어 있는지, 그리고 이 페이지를 http(s)로 열고 있는지 확인해주세요.');
+        throw new Error(
+          '구글 시트에 연결하는 중 오류가 발생했습니다.\n' +
+          '① 시트가 "링크가 있는 모든 사용자 - 뷰어"로 공유되어 있는지\n' +
+          '② 인터넷 연결 또는 광고 차단(애드블록) 확장 프로그램이 요청을 막고 있지 않은지 확인해주세요.\n' +
+          '(상세 오류: ' + (networkErr && networkErr.message ? networkErr.message : networkErr) + ')'
+        );
       }
       if(!res.ok) throw new Error('구글 시트를 불러오지 못했습니다 (' + res.status + '). 시트가 "링크가 있는 모든 사용자 - 뷰어"로 공유되어 있는지 확인해주세요.');
       var text = await res.text();
@@ -1196,46 +1212,65 @@
       }
 
       var rows = availParseCSV(text);
-      if(rows.length < 2) return [];
+      if(rows.length < 1) return [];
 
-      // 헤더 비교 시 BOM/공백/줄바꿈 등 보이지 않는 문자를 모두 제거해 정확히 매칭되도록 함
-      var normalize = function(s){
-        return ('' + s).replace(/\uFEFF/g, '').replace(/\s+/g, '').trim();
-      };
-      var targetDate = normalize(g.dateHeader);
-      var targetTime = normalize(g.timeHeader);
+      function availColLetterToIndex(letter){
+        var s = ('' + letter).trim().toUpperCase();
+        var idx = 0;
+        for(var i = 0; i < s.length; i++){ idx = idx * 26 + (s.charCodeAt(i) - 64); }
+        return idx - 1; // 0-based
+      }
 
-      // 헤더가 1행이 아니라 2~3행(제목 행 아래)에 있는 경우까지 대비해 처음 10행 안에서 탐색
-      var headerRowIdx = -1, dateIdx = -1, timeIdx = -1;
-      for(var r = 0; r < Math.min(10, rows.length); r++){
-        var normalized = rows[r].map(normalize);
-        var dI = normalized.indexOf(targetDate);
-        var tI = normalized.indexOf(targetTime);
-        if(dI !== -1 && tI !== -1){
-          headerRowIdx = r; dateIdx = dI; timeIdx = tI;
-          break;
+      var dateIdx, timeIdx;
+      if(g.dateColumnLetter && g.timeColumnLetter){
+        // 열 문자가 지정되어 있으면 헤더 텍스트와 무관하게 바로 그 열을 사용합니다.
+        dateIdx = availColLetterToIndex(g.dateColumnLetter);
+        timeIdx = availColLetterToIndex(g.timeColumnLetter);
+      } else {
+        // (열 문자가 없을 때의 대체 경로) 헤더 텍스트로 탐색
+        var normalize = function(s){
+          return ('' + s).replace(/\uFEFF/g, '').replace(/\s+/g, '').trim();
+        };
+        var targetDate = normalize(g.dateHeader);
+        var targetTime = normalize(g.timeHeader);
+        var HEADER_SEARCH_ROWS = 40;
+        dateIdx = -1; timeIdx = -1;
+        for(var r = 0; r < Math.min(HEADER_SEARCH_ROWS, rows.length); r++){
+          var normalized = rows[r].map(normalize);
+          for(var ci = 0; ci < normalized.length; ci++){
+            if(dateIdx === -1 && normalized[ci] && normalized[ci].indexOf(targetDate) !== -1) dateIdx = ci;
+            if(timeIdx === -1 && normalized[ci] && normalized[ci].indexOf(targetTime) !== -1) timeIdx = ci;
+          }
+          if(dateIdx !== -1 && timeIdx !== -1) break;
+        }
+        if(dateIdx === -1 || timeIdx === -1){
+          throw new Error('시트에서 "' + g.dateHeader + '" 또는 "' + g.timeHeader + '" 헤더를 찾지 못했습니다. GOOGLE_SHEET_CONFIG에 dateColumnLetter/timeColumnLetter를 지정해주세요.');
         }
       }
 
-      if(headerRowIdx === -1){
-        // 실제로 읽어온 상위 3개 행을 그대로 보여줘 원인을 바로 확인할 수 있게 함
-        var preview = rows.slice(0, 3).map(function(row){ return row.join(' | '); }).join('\n');
-        console.error('[모먼트웍스] 구글 시트에서 읽은 상위 행:\n' + preview);
-        throw new Error(
-          '시트에서 "' + g.dateHeader + '" 또는 "' + g.timeHeader + '" 컬럼을 찾지 못했습니다.\n' +
-          '실제로 읽어온 첫 줄: [' + (rows[0] ? rows[0].join(', ') : '(비어있음)') + ']'
-        );
-      }
-
+      // 헤더/제목/요약 행이 몇 줄이든 상관없이, 날짜 컬럼 값이 실제 날짜로
+      // 파싱되는 행만 데이터로 인식합니다 (제목·빈 행은 자동으로 건너뜀).
       var out = [];
-      for(var i = headerRowIdx + 1; i < rows.length; i++){
+      for(var i = 0; i < rows.length; i++){
         var row = rows[i];
         if(!row || row.length === 0) continue;
         var dateStr = availParseSheetDate(row[dateIdx]);
-        var timeStr = availParseSheetTime(row[timeIdx]);
         if(!dateStr) continue;
+        var timeStr = availParseSheetTime(row[timeIdx]);
         out.push({ date: dateStr, time: timeStr });
       }
+
+      if(out.length === 0){
+        var colPreview = rows.slice(0, 20).map(function(row, idx){
+          return (idx + 1) + '행 → ' + (row[dateIdx] || '(비어있음)') + ' / ' + (row[timeIdx] || '(비어있음)');
+        }).join('\n');
+        console.error('[모먼트웍스] ' + g.dateColumnLetter + '열/' + g.timeColumnLetter + '열에서 읽은 상위 20개 행:\n' + colPreview);
+        throw new Error(
+          g.dateColumnLetter + '열에서 유효한 날짜를 하나도 찾지 못했습니다.\n' +
+          '브라우저 개발자도구(F12) → Console 탭에서 실제로 읽은 값을 확인할 수 있어요.'
+        );
+      }
+
       return out;
     }
 
