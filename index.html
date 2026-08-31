@@ -255,20 +255,24 @@
   .avail-cal-weekdays span:last-child{color:var(--wine);}
   .avail-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
   .avail-cell{
-    aspect-ratio:1/1;border-radius:4px;padding:5px 4px;display:flex;flex-direction:column;
+    min-height:76px;border-radius:4px;padding:6px 3px;display:flex;flex-direction:column;
     align-items:center;justify-content:flex-start;font-size:10.5px;background:transparent;
   }
   .avail-cell .d-num{font-size:12.5px;font-weight:600;color:#B4AEA0;}
   .avail-cell.empty{visibility:hidden;}
   .avail-cell.closed .d-num, .avail-cell.past .d-num{color:#D8D2C4;}
-  .avail-cell.full .d-num{color:#B4AEA0;}
-  .avail-cell.full .d-label{color:#B4AEA0;font-size:9.5px;margin-top:2px;}
-  .avail-cell.open, .avail-cell.partial{background:var(--ivory);}
-  .avail-cell.open .d-num, .avail-cell.partial .d-num{color:var(--ink-text);}
-  .avail-cell .d-dot{width:6px;height:6px;border-radius:50%;margin-top:3px;}
-  .avail-cell.open .d-dot{background:#4C8B5A;}
-  .avail-cell.partial .d-dot{background:var(--gold);}
-  .avail-cell .d-label{font-size:9px;color:var(--muted);margin-top:2px;text-align:center;line-height:1.25;}
+  .avail-cell.bookable{background:var(--ivory);}
+  .avail-cell.bookable .d-num{color:var(--ink-text);}
+  .avail-cell .d-holi{font-size:8px;color:var(--wine);font-weight:600;margin-top:1px;}
+  .avail-cell .d-half{
+    display:flex;align-items:center;gap:3px;font-size:8.5px;margin-top:4px;
+    color:var(--muted);white-space:nowrap;
+  }
+  .avail-cell .d-half .dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+  .avail-cell .d-half.open{color:#3D6E48;}
+  .avail-cell .d-half.open .dot{background:#4C8B5A;}
+  .avail-cell .d-half.full{color:#B4AEA0;}
+  .avail-cell .d-half.full .dot{background:#B4AEA0;}
   .avail-legend{display:flex;justify-content:center;gap:18px;margin-top:20px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;}
   .avail-legend span{display:flex;align-items:center;gap:6px;}
   .avail-legend i.dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
@@ -1015,9 +1019,9 @@
       </div>
 
       <div class="avail-legend">
-        <span><i class="dot" style="background:#4C8B5A;"></i> 오전 · 오후 모두 가능</span>
-        <span><i class="dot" style="background:var(--gold);"></i> 시간 제한 있음</span>
-        <span><i class="dot" style="background:#D8D2C4;"></i> 마감 · 휴무</span>
+        <span><i class="dot" style="background:#4C8B5A;"></i> 예약가능 (오전/오후)</span>
+        <span><i class="dot" style="background:#B4AEA0;"></i> 예약마감</span>
+        <span><i class="dot" style="background:#D8D2C4;"></i> 평일(응대 안함)</span>
       </div>
     </div>
   </div>
@@ -1079,23 +1083,44 @@
       statusColumn: 'status',   // TODO: 예약 상태 컬럼명 (없다면 이 필터는 제거 필요)
       confirmedValue: 'confirmed', // TODO: '계약 확정' 상태값
 
-      businessStart: 9,   // 영업 시작 시각 (시)
-      businessEnd: 20,    // 영업 종료 시각 (시)
-      bufferHours: 5,     // 계약 1건 있는 날, 앞뒤로 확보할 최소 간격(시간)
-      amPmCutoff: 13,     // 오전/오후 구분 기준 시각
-      weekendOnly: true,  // 주말(토·일)만 실제 응대일로 취급할지 여부 (평일은 '휴무'로 표시)
+      amStart: 8,    // 오전 시작 시각 (08:00)
+      amEnd: 14,     // 오전 마감 기준 (08:00~14:00 = 오전)
+      pmStart: 14.0167, // 오후 시작 시각 (14:01)
+      pmEnd: 20,     // 오후 마감 기준 (14:01~20:00 = 오후)
       monthsAhead: 2      // 오늘 이후 몇 개월치를 미리 불러올지
     };
+
+    // 2026년 대한민국 공휴일 (대체공휴일 포함) — 매년 직접 갱신이 필요합니다.
+    // 출처: 관공서의 공휴일에 관한 규정 기준, 확정 전 사안(제헌절 재지정 등)은
+    // 확정되는 대로 이 배열만 수정하면 됩니다.
+    var KR_HOLIDAYS_2026 = [
+      '2026-01-01', // 신정
+      '2026-02-16', // 설날 연휴
+      '2026-02-17', // 설날
+      '2026-02-18', // 설날 연휴
+      '2026-03-01', // 삼일절
+      '2026-03-02', // 삼일절 대체공휴일
+      '2026-05-05', // 어린이날
+      '2026-05-24', // 부처님오신날
+      '2026-05-25', // 부처님오신날 대체공휴일
+      '2026-06-06', // 현충일
+      '2026-07-17', // 제헌절
+      '2026-08-15', // 광복절
+      '2026-08-17', // 광복절 대체공휴일
+      '2026-09-24', // 추석 연휴
+      '2026-09-25', // 추석
+      '2026-09-26', // 추석 연휴
+      '2026-10-03', // 개천절
+      '2026-10-05', // 개천절 대체공휴일
+      '2026-10-09', // 한글날
+      '2026-12-25'  // 크리스마스
+    ];
+    function availIsHoliday(dateStr){ return KR_HOLIDAYS_2026.indexOf(dateStr) !== -1; }
 
     var availState = { bookingsByDate: {}, viewYear: null, viewMonth: null, loaded: false, loading: false };
 
     function availPad(n){ return n < 10 ? '0' + n : '' + n; }
     function availDateStr(y, m, d){ return y + '-' + availPad(m + 1) + '-' + availPad(d); }
-    function availFormatHour(h){
-      var whole = Math.floor(h);
-      var min = Math.round((h - whole) * 60);
-      return min === 0 ? (whole + '시') : (whole + '시 ' + min + '분');
-    }
     function availParseTime(t){
       // 'HH:MM' or 'HH:MM:SS' 형태를 시(decimal)로 변환
       if(!t) return null;
@@ -1249,25 +1274,19 @@
     function availComputeDayStatus(dateStr){
       var c = AVAIL_CONFIG;
       var list = availState.bookingsByDate[dateStr] || [];
+      var amClosed = false, pmClosed = false;
 
-      if(list.length === 0){
-        return { status: 'open', label: '오전·오후' };
-      }
+      list.forEach(function(raw){
+        var t = availParseTime(raw);
+        if(t === null) return;
+        if(t >= c.amStart && t <= c.amEnd) amClosed = true;
+        if(t > c.amEnd && t <= c.pmEnd) pmClosed = true;
+      });
 
-      if(list.length === 1){
-        var t = availParseTime(list[0]);
-        if(t === null) return { status: 'full', label: '마감' };
-        var before = t - c.bufferHours;
-        var after = t + c.bufferHours;
-        var labels = [];
-        if(before > c.businessStart) labels.push('~' + availFormatHour(before));
-        if(after < c.businessEnd) labels.push(availFormatHour(after) + '~');
-        if(labels.length === 0) return { status: 'full', label: '마감' };
-        return { status: 'partial', label: labels.join(' · ') };
-      }
-
-      // 계약 2건 이상 = 예약 마감
-      return { status: 'full', label: '마감' };
+      return {
+        am: amClosed ? 'full' : 'open',
+        pm: pmClosed ? 'full' : 'open'
+      };
     }
 
     function availRenderMonth(year, month /* 0-indexed */){
@@ -1288,33 +1307,29 @@
         var dateObj = new Date(year, month, d);
         var dow = dateObj.getDay();
         var isPast = dateObj < today;
+        var dateStr = availDateStr(year, month, d);
         var isWeekend = (dow === 0 || dow === 6);
+        var isHoliday = availIsHoliday(dateStr);
+        var isBookable = isWeekend || isHoliday;
 
         if(isPast){
           cells.push('<div class="avail-cell past"><span class="d-num num">' + d + '</span></div>');
           continue;
         }
-        if(AVAIL_CONFIG.weekendOnly && !isWeekend){
+        if(!isBookable){
           cells.push('<div class="avail-cell closed"><span class="d-num num">' + d + '</span></div>');
           continue;
         }
 
-        var dateStr = availDateStr(year, month, d);
         var status = availComputeDayStatus(dateStr);
+        var holidayMark = isHoliday && !isWeekend ? ' <span class="d-holi">공휴일</span>' : '';
 
-        if(status.status === 'full'){
-          cells.push(
-            '<div class="avail-cell full"><span class="d-num num">' + d + '</span>' +
-            '<span class="d-label">마감</span></div>'
-          );
-        } else {
-          var dotClass = status.status === 'open' ? 'open' : 'partial';
-          cells.push(
-            '<div class="avail-cell ' + dotClass + '"><span class="d-num num">' + d + '</span>' +
-            '<span class="d-dot"></span>' +
-            '<span class="d-label">' + status.label + '</span></div>'
-          );
-        }
+        cells.push(
+          '<div class="avail-cell bookable"><span class="d-num num">' + d + '</span>' + holidayMark +
+          '<div class="d-half ' + status.am + '"><span class="dot"></span>오전 ' + (status.am === 'open' ? '가능' : '마감') + '</div>' +
+          '<div class="d-half ' + status.pm + '"><span class="dot"></span>오후 ' + (status.pm === 'open' ? '가능' : '마감') + '</div>' +
+          '</div>'
+        );
       }
 
       gridEl.innerHTML = cells.join('');
